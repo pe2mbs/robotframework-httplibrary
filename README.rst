@@ -74,6 +74,7 @@ mostly a wrapper supposed to have a nice API)!
 Changelog
 ---------
 **v0.4.6 (RC1)**
+
 - Added Python 3 support
 - Added PATCH keyword
 - Added OPTIONS keyword
