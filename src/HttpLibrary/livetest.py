@@ -40,10 +40,18 @@ __version__ = '0.5'
 
 import sys
 import webtest
-import httplib
-import urlparse
-from Cookie import BaseCookie, CookieError
-from six.moves import http_cookiejar
+if sys.version_info[ 0 ] < 3:
+    import httplib
+    import urlparse
+    from Cookie import BaseCookie, CookieError
+    from six.moves import http_cookiejar
+
+else:
+    import http.client as httplib
+    import urllib.parse as urlparse
+    from http.cookies import BaseCookie, CookieError
+    from http.cookiejar import CookieJar as http_cookiejar
+
 
 conn_classes = {'http': httplib.HTTPConnection,
                 'https': httplib.HTTPSConnection}

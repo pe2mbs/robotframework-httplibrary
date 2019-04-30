@@ -7,8 +7,9 @@ def run_cli(args):
 
     import robot
     try:
-        robot.run_cli(args)
-    except Exception, e:
-        print e
+        robot.run_cli( args )
+
+    except Exception as e:
+        print( e )
         import robot.runner
-        robot.run_from_cli(args, robot.runner.__doc__)
+        robot.run_from_cli( args, robot.runner.__doc__ )

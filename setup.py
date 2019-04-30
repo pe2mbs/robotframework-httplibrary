@@ -9,10 +9,12 @@ Topic :: Software Development :: Testing
 
 from os.path import join, dirname
 long_description = open(join(dirname(__file__), 'README.rst',)).read()
+filename = 'src/HttpLibrary/version.py'
+exec( open( filename ).read() )
 
 setup(
     name='robotframework-httplibrary',
-    version="0.4.2",
+    version = __version__,
     description='Robot Framework keywords for HTTP requests',
     long_description=long_description,
     author='Filip Noetzel',

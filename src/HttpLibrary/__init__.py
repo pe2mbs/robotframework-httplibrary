@@ -1,27 +1,35 @@
+import sys
 from robot.api import logger
-
 from base64 import b64encode
 from functools import wraps
-from urlparse import urlparse
+if sys.version_info[ 0 ] < 3:
+    # Python 2.x support
+    from urlparse import urlparse
 
-import livetest
+else:
+    # Python 3.x support
+    from urllib.parse import urlparse
+
+import HttpLibrary.livetest
 import json
 import jsonpointer
 import jsonpatch
+from HttpLibrary.version import __version__
 
 
-def load_json(json_string):
+def load_json( json_string ):
     try:
-        return json.loads(json_string)
-    except ValueError, e:
+        return json.loads( json_string )
+
+    except ValueError as e:
         raise ValueError("Could not parse '%s' as JSON: %s" % (json_string, e))
 
 
-def _with_json(f):
+def _with_json( f ):
     @wraps(f)
-    def wrapper(self, json_string, *args, **kwargs):
-        return json.dumps(
-            f(self, load_json(json_string), *args, **kwargs), ensure_ascii=False)
+    def wrapper( self, json_string, *args, **kwargs ):
+        return json.dumps( f( self, load_json( json_string ), *args, **kwargs ), ensure_ascii = False )
+
     return wrapper
 
 
@@ -34,11 +42,11 @@ class HTTP:
     The JSON related keywords use JSON Pointer. To learn more about JSON
     Pointer, go to http://tools.ietf.org/html/draft-pbryan-zyp-json-pointer-00.
     """
+    ROBOT_LIBRARY_VERSION = __version__
+    ROBOT_LIBRARY_SCOPE = 'TEST SUITE'
 
-    ROBOT_LIBRARY_VERSION = "0.4.2"
-
-    class Context(object):
-        def __init__(self, http, host=None, scheme='http'):
+    class Context( object ):
+        def __init__( self, http, host = None, scheme = 'http' ):
             # daddy
             self._http = http
             self._host = host
@@ -46,44 +54,47 @@ class HTTP:
 
             # the livetest app
             if host:
-                self.app = livetest.TestApp(host, scheme=scheme)
+                self.app = livetest.TestApp( host, scheme = scheme )
+
             else:
                 self.app = None
 
             # the last request
             self.response = None
-
             # requirements for the next request
             # None -> no requirements
             # True -> request should succeed
             # False -> request should not succeed
             # string -> response status code should startwith(string)
             self.next_request_should = None
-
             # setup new http context
-            self.post_process_request(None)
+            self.post_process_request( None )
+            return
 
         def pre_process_request(self):
-            if len(self.request_headers.items()) > 0:
-                logger.debug("Request headers:")
+            if len( self.request_headers.items() ) > 0:
+                logger.debug( "Request headers:" )
                 for name, value in self.request_headers.items():
                     logger.debug("%s: %s" % (name, value))
+
             else:
-                logger.debug("No request headers set")
+                logger.debug( "No request headers set" )
 
             if self.request_body is None:
-                logger.debug("No request body set")
+                logger.debug( "No request body set" )
+
             else:
-                logger.debug("Request body:")
-                logger.debug(self.request_body)
+                logger.debug( "Request body:" )
+                logger.debug( self.request_body )
 
-        def post_process_request(self, response):
+            return
+
+        def post_process_request( self, response ):
             self.response = response
-
             if response != None:
-                self._http.log_response_status('DEBUG')
-                self._http.log_response_headers('DEBUG')
-                self._http.log_response_body('DEBUG')
+                self._http.log_response_status( 'DEBUG' )
+                self._http.log_response_headers( 'DEBUG' )
+                self._http.log_response_body( 'DEBUG' )
 
             next_request_should = self.next_request_should
 
@@ -92,72 +103,71 @@ class HTTP:
             self.next_request_should = True
             self.request_headers = {}
             if self._host != None:
-                self.request_headers['Host'] = self._host
+                self.request_headers[ 'Host' ] = self._host
+
             self.request_body = None
 
             # check flag set by "Next Request Should Succeed"
             if next_request_should == True:
-                assert int(self.response.status[0:3]) < 400, \
-                    'Request should have succeeded, but was "%s".' % \
-                    self.response.status
+                assert int( self.response.status[ 0 : 3 ] ) < 400, \
+                    'Request should have succeeded, but was "%s".' % self.response.status
 
             # check flag set by "Next Request Should Not Succeed"
             elif next_request_should == False:
-                assert int(self.response.status[0:3]) >= 400, \
-                    'Request should not have succeeded, but was "%s".' % \
-                    self.response.status
+                assert int( self.response.status[ 0 : 3 ] ) >= 400, \
+                    'Request should not have succeeded, but was "%s".' % self.response.status
 
             elif next_request_should:
-                self._http.response_status_code_should_equal(
-                    next_request_should)
+                self._http.response_status_code_should_equal( next_request_should )
 
-    ROBOT_LIBRARY_SCOPE = 'TEST SUITE'
+            return
+
 
     # internal
-
     def __init__(self):
-        self._contexts = [HTTP.Context(self)]
+        self._contexts = [ HTTP.Context( self ) ]
+        return
 
     @property
-    def context(self):
-        return self._contexts[-1]
+    def context( self ):
+        return self._contexts[ -1 ]
 
     @property
-    def app(self):
+    def app( self ):
         if not self.context.app:
-            raise Exception(
-                'Not connected to any HTTP Host. Use "Create HTTP Context" keyword first.')
+            raise Exception( 'Not connected to any HTTP Host. Use "Create HTTP Context" keyword first.' )
+
         return self.context.app
 
     @property
     def response(self):
         if not self.context.response:
-            raise Exception(
-                'No request available, use e.g. GET to create one.')
+            raise Exception( 'No request available, use e.g. GET to create one.' )
+
         return self.context.response
 
-    def _path_from_url_or_path(self, url_or_path):
+    def _path_from_url_or_path( self, url_or_path ):
+        if url_or_path.startswith( "\"" ) and url_or_path.endswith( "\"" ):
+            url_or_path = url_or_path[ 1: -1 ]
 
-        if url_or_path.startswith("/"):
+        if url_or_path.startswith( "/" ):
             return url_or_path
 
-        elif url_or_path.startswith("http"):
-            parsed_url = urlparse(url_or_path)
-            self.create_http_context(parsed_url.netloc, parsed_url.scheme)
+        elif url_or_path.startswith( "http" ):
+            parsed_url = urlparse( url_or_path )
+            self.create_http_context( parsed_url.netloc, parsed_url.scheme )
             return parsed_url.path
 
-        raise Exception('"%s" needs to be in form of "/path" or "http://host/path"'
-                        % url_or_path)
+        raise Exception( '"%s" needs to be in form of "/path" or "http://host/path"' % url_or_path )
 
     # setup
-
     def set_http_host(self, host):
         """
         *DEPRECATED* Use `Create HTTP Context` instead.
         """
         assert False, "Use the keyword 'Create HTTP Context' instead, this keyword is deprecated."
 
-    def create_http_context(self, host=None, scheme='http'):
+    def create_http_context( self, host = None, scheme = 'http' ):
         """
         Sets the HTTP host to use for future requests. You must call this
         before issuing any HTTP requests.
@@ -166,25 +176,25 @@ class HTTP:
         `scheme` the protocol scheme to use. Valid values are 'http', 'https'
         """
 
-        assert scheme in (
-            'http', 'https'), "`scheme` parameter must be 'http' or 'https'"
-
+        assert scheme in ( 'http', 'https'), "`scheme` parameter must be 'http' or 'https'"
         if host == None:
             host = self.context.app.host
-        logger.info("Host for next HTTP request set to '%s'" % host)
-        logger.info("Scheme for next HTTP request set to '%s'" % scheme)
-        self._contexts.append(HTTP.Context(self, host, scheme))
 
-    def restore_http_context(self):
+        logger.info( "Host for next HTTP request set to '%s'" % host )
+        logger.info( "Scheme for next HTTP request set to '%s'" % scheme )
+        self._contexts.append( HTTP.Context( self, host, scheme ) )
+        return
+
+    def restore_http_context( self ):
         """
         Restores HttpLibrary's state to the point before the last "Create Http
         Context" call.
         """
         self._contexts.pop()
+        return
 
     # request
-
-    def http_request(self, verb, url):
+    def http_request( self, verb, url ):
         """
         Issues a HTTP request with an uncommon HTTP Verb.
 
@@ -192,16 +202,15 @@ class HTTP:
         `url` is the URL relative to the server root, e.g. '/_utils/config.html'
         """
         path = self._path_from_url_or_path(url)
-
         self.context.pre_process_request()
-        logger.debug("Performing %s request on %s://%s%s" % (verb,
-                     self.context._scheme, self.app.host, path,))
-        self.context.post_process_request(
-            self.context.app.request(path, {}, self.context.request_headers,
-                                     method=verb.upper(),)
-        )
+        logger.debug("Performing %s request on %s://%s%s" % ( verb,
+                                                              self.context._scheme,
+                                                              self.app.host, path,))
+        self.context.post_process_request( self.context.app.request( path, {}, self.context.request_headers,
+                                                                     method=verb.upper(), ) )
+        return
 
-    def HEAD(self, url):
+    def HEAD( self, url ):
         """
         Issues a HTTP HEAD request.
 
@@ -209,13 +218,11 @@ class HTTP:
         """
         path = self._path_from_url_or_path(url)
         self.context.pre_process_request()
-        logger.debug("Performing HEAD request on %s://%s%s" % (
-            self.context._scheme, self.app.host, path,))
-        self.context.post_process_request(
-            self.app.head(path, self.context.request_headers)
-        )
+        logger.debug("Performing HEAD request on %s://%s%s" % ( self.context._scheme, self.app.host, path,))
+        self.context.post_process_request( self.app.head(path, self.context.request_headers) )
+        return
 
-    def GET(self, url):
+    def GET( self, url ):
         """
         Issues a HTTP GET request.
 
@@ -223,13 +230,11 @@ class HTTP:
         """
         path = self._path_from_url_or_path(url)
         self.context.pre_process_request()
-        logger.debug("Performing GET request on %s://%s%s" % (
-            self.context._scheme, self.app.host, path))
-        self.context.post_process_request(
-            self.app.get(path, {}, self.context.request_headers)
-        )
+        logger.debug("Performing GET request on %s://%s%s" % ( self.context._scheme, self.app.host, path))
+        self.context.post_process_request( self.app.get(path, {}, self.context.request_headers) )
+        return
 
-    def POST(self, url):
+    def POST( self, url ):
         """
         Issues a HTTP POST request.
 
@@ -238,94 +243,119 @@ class HTTP:
         path = self._path_from_url_or_path(url)
         kwargs = {}
         if 'Content-Type' in self.context.request_headers:
-            kwargs[
-                'content_type'] = self.context.request_headers['Content-Type']
-        logger.debug("Performing POST request on %s://%s%s" % (
-            self.context._scheme, self.app.host, url))
-        self.context.pre_process_request()
-        self.context.post_process_request(
-            self.app.post(path, self.context.request_body or {},
-                          self.context.request_headers, **kwargs)
-        )
+            kwargs[ 'content_type' ] = self.context.request_headers['Content-Type']
 
-    def PUT(self, url):
+        logger.debug( "Performing POST request on %s://%s%s" % ( self.context._scheme, self.app.host, url ) )
+        self.context.pre_process_request()
+        self.context.post_process_request( self.app.post( path, self.context.request_body or {},
+                                                          self.context.request_headers, **kwargs) )
+        return
+
+    def PUT( self, url ):
         """
         Issues a HTTP PUT request.
 
         `url` is the URL relative to the server root, e.g. '/_utils/config.html'
         """
-        path = self._path_from_url_or_path(url)
+        path = self._path_from_url_or_path( url )
         kwargs = {}
         if 'Content-Type' in self.context.request_headers:
-            kwargs[
-                'content_type'] = self.context.request_headers['Content-Type']
+            kwargs[ 'content_type' ] = self.context.request_headers['Content-Type']
+
         self.context.pre_process_request()
-        logger.debug("Performing PUT request on %s://%s%s" % (
-            self.context._scheme, self.app.host, url))
+        logger.debug("Performing PUT request on %s://%s%s" % ( self.context._scheme, self.app.host, url))
         self.context.post_process_request(
             self.app.put(path, self.context.request_body or {},
-                         self.context.request_headers, **kwargs)
-        )
+                         self.context.request_headers, **kwargs) )
+        return
 
-    def DELETE(self, url):
+    def PATCH(self, url):
+        """
+        Issues an HTTP PATCH request.
+         `url` is the URL relative to the server root, e.g. '/_utils/config.html'
+        """
+        path = self._path_from_url_or_path( url )
+        kwargs = {}
+        if 'Content-Type' in self.context.request_headers:
+            kwargs[ 'content_type' ] = self.context.request_headers['Content-Type']
+
+        self.context.pre_process_request()
+        logger.debug("Performing PATCH request on %s://%s%s" % ( self.context._scheme, self.app.host, url ) )
+        self.context.post_process_request( self.app.patch( path,
+                                                           self.context.request_body or {},
+                                                           self.context.request_headers,
+                                                           **kwargs ) )
+        return
+
+    def DELETE( self, url ):
         """
         Issues a HTTP DELETE request.
 
         `url` is the URL relative to the server root, e.g. '/_utils/config.html'
         """
-        path = self._path_from_url_or_path(url)
+        path = self._path_from_url_or_path( url )
         self.context.pre_process_request()
-        logger.debug("Performing DELETE request on %s://%s%s" % (
-            self.context._scheme, self.app.host, url))
-        self.context.post_process_request(
-            self.app.delete(path, {}, self.context.request_headers)
-        )
+        logger.debug("Performing DELETE request on %s://%s%s" % ( self.context._scheme, self.app.host, url))
+        self.context.post_process_request( self.app.delete(path, {}, self.context.request_headers) )
+        return
 
-    def follow_response(self):
+    def OPTIONS( self, url ):
+        """
+        Issues a HTTP OPTIONS request.
+         `url` is the URL relative to the server root, e.g. '/_utils/config.html'
+        """
+        path = self._path_from_url_or_path( url )
+        self.context.pre_process_request()
+        logger.debug("Performing OPTIONS request on %s://%s%s" % ( self.context._scheme, self.app.host, path,))
+        self.context.post_process_request( self.app.options(path, self.context.request_headers) )
+        return
+
+    def follow_response( self ):
         """
         Follows a HTTP redirect if the previous response status code was a 301 or 302.
         """
-        location = self.response.headers.get('location')
+        location = self.response.headers.get( 'location' )
 
         if location is None:
             self.log_response_headers('INFO')
-            raise Exception(
-                "Can not follow a response without a location header.")
+            raise Exception( "Can not follow a response without a location header.")
 
-        logger.debug(
-            "Following response, last response's Location header was %s" % location)
-
+        logger.debug( "Following response, last response's Location header was %s" % location)
         self.context.response = self.response.follow()
+        return
 
-    def next_request_may_not_succeed(self):
+    def next_request_may_not_succeed( self ):
         """
         Don't fail the next request if it's status code is >= 400
         """
         self.context.next_request_should = None
+        return
 
-    def next_request_should_succeed(self):
+    def next_request_should_succeed( self ):
         """
         Fails the next request if it's status code is >= 400. This is the
         standard behaviour (only use this keyword if you specified `Next
         Request Should Not Succeed` earlier.
         """
         self.context.next_request_should = True
+        return
 
-    def next_request_should_not_succeed(self):
+    def next_request_should_not_succeed( self ):
         """
         Fails the next request if it's status code is < 400
         """
         self.context.next_request_should = False
+        return
 
-    def next_request_should_have_status_code(self, status_code=None):
+    def next_request_should_have_status_code( self, status_code = None ):
         """
         Fails the next request if it's status code is different from `status_code`.
         """
         self.context.next_request_should = status_code
+        return
 
     # status code
-
-    def get_response_status(self):
+    def get_response_status( self ):
         """
         Returns the response status line (e.g. "200 OK" or "404 Not found")
 
@@ -339,16 +369,17 @@ class HTTP:
         """
         return self.response.status
 
-    def response_status_code_should_equal(self, status_code):
+    def response_status_code_should_equal( self, status_code ):
         """
         Fails if the response status code of the previous request was not the
         specified one.
 
         `status_code` the status code to compare against.
         """
-        assert self.response.status.startswith(status_code), \
+        assert self.response.status.startswith( status_code ), \
             '"%s" does not start with "%s", but should have.' % (
                 self.response.status, status_code)
+        return
 
     def response_status_code_should_not_equal(self, status_code):
         """
@@ -360,15 +391,16 @@ class HTTP:
         assert not self.response.status.startswith(status_code), \
             '"%s" starts with "%s", but should not.' % (
                 self.response.status, status_code)
+        return
 
     # response headers
-
     def response_should_have_header(self, header_name):
         """
         Fails if the response does not have a header named `header_name`
         """
         assert header_name in self.response.headers, \
             'Response did not have "%s" header, but should have.' % header_name
+        return
 
     def response_should_not_have_header(self, header_name):
         """
@@ -376,6 +408,7 @@ class HTTP:
         """
         assert not header_name in self.response.headers, \
             'Response did have "%s" header, but should not have.' % header_name
+        return
 
     def get_response_header(self, header_name):
         """
@@ -398,6 +431,7 @@ class HTTP:
         assert actual == expected, \
             'Response header "%s" should have been "%s" but was "%s".' % (
             header_name, expected, actual)
+        return
 
     def response_header_should_not_equal(self, header_name, not_expected):
         """
@@ -409,6 +443,7 @@ class HTTP:
         assert actual != not_expected, \
             'Response header "%s" was "%s" but should not have been.' % (
             header_name, actual)
+        return
 
     def log_response_headers(self, log_level='INFO'):
         """
@@ -420,8 +455,9 @@ class HTTP:
         for name, value in self.response.headers.items():
             logger.write("%s: %s" % (name, value), log_level)
 
-    # request headers
+        return
 
+    # request headers
     def set_request_header(self, header_name, header_value):
         """
         Sets a request header for the next request.
@@ -429,9 +465,9 @@ class HTTP:
         `header_name` is the name of the header, e.g. `User-Agent`
         `header_value` is the key of the header, e.g. `RobotFramework HttpLibrary (Mozilla/4.0)`
         """
-        logger.info(
-            'Set request header "%s" to "%s"' % (header_name, header_value))
+        logger.info( 'Set request header "%s" to "%s"' % (header_name, header_value))
         self.context.request_headers[header_name] = header_value
+        return
 
     def set_basic_auth(self, username, password):
         """
@@ -445,11 +481,10 @@ class HTTP:
         """
         credentials = "%s:%s" % (username, password)
         logger.info('Set basic auth to "%s"' % credentials)
-        self.set_request_header(
-            "Authorization", "Basic %s" % b64encode(credentials))
+        self.set_request_header( "Authorization", "Basic %s" % b64encode(credentials))
+        return
 
     # payload
-
     def set_request_body(self, body):
         """
         Set the request body for the next HTTP request.
@@ -461,6 +496,7 @@ class HTTP:
         """
         logger.info('Request body set to "%s".' % body)
         self.context.request_body = body.encode("utf-8")
+        return
 
     def get_response_body(self):
         """
@@ -488,6 +524,7 @@ class HTTP:
         assert should_contain in self.response.body, \
             '"%s" should have contained "%s", but did not.' % (
                 self.response.body, should_contain)
+        return
 
     def log_response_body(self, log_level='INFO'):
         """
@@ -498,8 +535,11 @@ class HTTP:
         if self.response.body:
             logger.write("Response body:", log_level)
             logger.write(self.response.body, log_level)
+
         else:
             logger.debug("No response body received", log_level)
+
+        return
 
     def log_response_status(self, log_level='INFO'):
         """
@@ -508,11 +548,10 @@ class HTTP:
         Specify `log_level` (default: "INFO") to set the log level.
         """
 
-        logger.write(
-            "Response status line: %s" % self.response.status, log_level)
+        logger.write( "Response status line: %s" % self.response.status, log_level )
+        return
 
     # json
-
     def should_be_valid_json(self, json_string):
         """
         Attempts to parse `json_string` as JSON. Fails, if `json_string` is invalid JSON.
@@ -520,7 +559,8 @@ class HTTP:
         Example:
         | Should Be Valid Json | {"foo": "bar"} |
         """
-        self.parse_json(json_string)
+        self.parse_json( json_string )
+        return
 
     def parse_json(self, json_string):
         """
@@ -548,9 +588,9 @@ class HTTP:
 
         try:
             return json.dumps(data, ensure_ascii=False)
-        except ValueError, e:
-            raise ValueError(
-                "Could not stringify '%r' to JSON: %s" % (data, e))
+
+        except ValueError as e:
+            raise ValueError( "Could not stringify '%r' to JSON: %s" % (data, e))
 
     @_with_json
     def get_json_value(self, json_string, json_pointer):
@@ -578,6 +618,7 @@ class HTTP:
         assert got == expected_value, \
             'JSON value "%s" does not equal "%s", but should have.' % (
                 got, expected_value)
+        return
 
     def json_value_should_not_equal(self, json_string, json_pointer, expected_value):
         """
@@ -590,12 +631,10 @@ class HTTP:
         """
 
         got = self.get_json_value(json_string, json_pointer)
-
         message = 'JSON value "%s" does not equal "%s"' % (got, expected_value)
-
         assert got != expected_value, "%s, but should have." % message
-
         logger.debug("%s." % message)
+        return
 
     @_with_json
     def set_json_value(self, json_string, json_pointer, json_value):
@@ -621,8 +660,9 @@ class HTTP:
         for line in json.dumps(json_string, indent=2, ensure_ascii=False).split('\n'):
             logger.write(line, log_level)
 
-    # debug
+        return
 
+    # debug
     def show_response_body_in_browser(self):
         """
         Opens your default web browser with the last request's response body.
@@ -630,3 +670,4 @@ class HTTP:
         This is meant for debugging response body's with complex media types.
         """
         self.context.response.showbrowser()
+        return
